@@ -29,10 +29,40 @@ jobs:
           docker image push --all-tags ${{ secrets.ACR_INSTANCE }}/${{ secrets.IMAGE_NAME }}
           docker logout
           
+  build-and-push-helm-chart:
+    name: Build and Push Helm Chart
+    runs-on: windows-latest
+    needs: [build-and-publish-docker-image]
+    steps:
+    - uses: actions/checkout@master
+
+    - name: Helm Repo Add
+      run: |
+        helm repo add ${{ secrets.ACR_INSTANCE }} https://${{ secrets.ACR_INSTANCE }}/helm/ --username ${{ secrets.ACR_USER }} --password ${{ secrets.ACR_SECRET }}
+      env:
+        HELM_EXPERIMENTAL_OCI: 1
+
+    - name: Helm Chart Save
+      run: |
+        cd .\charts\mvcmusicstoreweb
+        helm chart save . ${{ secrets.IMAGE_NAME }}:v${{ github.run_id }}
+        helm chart save . ${{ secrets.ACR_INSTANCE }}/helm/${{ secrets.IMAGE_NAME }}:v${{ github.run_id }}
+        # list out saved charts
+        helm chart list
+      env:
+        HELM_EXPERIMENTAL_OCI: 1
+
+    - name: Helm Chart Push
+      run: |
+        helm registry login ${{ secrets.ACR_INSTANCE }} --username ${{ secrets.ACR_USER }} --password ${{ secrets.ACR_SECRET }}
+        helm chart push ${{ secrets.ACR_INSTANCE }}/helm/${{ secrets.IMAGE_NAME }}:v${{ github.run_id }}
+      env:
+        HELM_EXPERIMENTAL_OCI: 1
+        
   aks-deployment:
     name: AKS Deployment
     runs-on: windows-latest
-    needs: [build-and-publish-docker-image]
+    needs: [build-and-publish-docker-image,build-and-push-helm-chart]
     steps:
     - uses: actions/checkout@master
 
